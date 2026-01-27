@@ -1,0 +1,19 @@
+syntax = "proto3";
+package enthropic.common;
+
+message UUID { string value = 1; }
+message Decimal { string value = 1; }
+message Timestamp { int64 seconds = 1; int32 nanos = 2; }
+message Result { bool success = 1; string error_message = 2; string error_code = 3; }
+message PageRequest { int32 page = 1; int32 page_size = 2; }
+message PageResponse { int32 total_items = 1; int32 total_pages = 2; int32 current_page = 3; }
+
+// Authentication context passed with all messages
+message AuthContext {
+  string account_id = 1;
+  string username = 2;
+  string role = 3;
+  repeated string permissions = 4;
+  int64 expires_at = 5;
+  string token_jti = 6;
+}

@@ -1,0 +1,25 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "enthropic.fullname" . }}-execution-core
+  labels:
+    {{- include "enthropic.labels" . | nindent 4 }}
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      {{- include "enthropic.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: execution-core
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "enthropic.fullname" . }}-nats-gateway
+  labels:
+    {{- include "enthropic.labels" . | nindent 4 }}
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      {{- include "enthropic.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: nats-gateway

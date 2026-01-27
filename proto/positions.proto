@@ -1,0 +1,44 @@
+syntax = "proto3";
+package enthropic.positions;
+import "common.proto";
+
+enum PositionDirection { POSITION_DIRECTION_UNSPECIFIED = 0; POSITION_DIRECTION_LONG = 1; POSITION_DIRECTION_SHORT = 2; POSITION_DIRECTION_FLAT = 3; }
+
+message Position {
+  string account_id = 1;
+  string symbol = 2;
+  enthropic.common.Decimal net_quantity = 3;
+  enthropic.common.Decimal avg_price = 4;
+  enthropic.common.Decimal unrealized_pnl = 5;
+  enthropic.common.Decimal realized_pnl = 6;
+  enthropic.common.Decimal market_value = 7;
+  enthropic.common.Decimal cost_basis = 8;
+  enthropic.common.Timestamp updated_at = 9;
+}
+
+message PositionUpdate { Position position = 1; string trigger = 2; string trade_id = 3; }
+
+message Account {
+  string id = 1;
+  string username = 2;
+  string role = 3;
+  enthropic.common.Decimal balance = 4;
+  enthropic.common.Decimal available_balance = 5;
+  enthropic.common.Decimal total_equity = 6;
+  enthropic.common.Decimal margin_used = 7;
+  repeated Position positions = 8;
+  enthropic.common.Timestamp created_at = 9;
+  enthropic.common.Timestamp updated_at = 10;
+}
+
+message GetPositionRequest { enthropic.common.AuthContext auth = 1; string symbol = 2; }
+message GetAccountPositionsRequest { enthropic.common.AuthContext auth = 1; }
+message PositionList { repeated Position positions = 1; }
+message AccountRiskSummary {
+  string account_id = 1;
+  enthropic.common.Decimal total_exposure = 2;
+  enthropic.common.Decimal unrealized_pnl = 3;
+  enthropic.common.Decimal margin_utilization = 4;
+  int32 position_count = 5;
+  int32 open_order_count = 6;
+}

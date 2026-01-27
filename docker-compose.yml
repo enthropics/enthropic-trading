@@ -1,0 +1,290 @@
+version: '3.9'
+
+services:
+  # ===========================================
+  # INFRASTRUCTURE
+  # ===========================================
+  postgres:
+    image: timescale/timescaledb:latest-pg16
+    container_name: enthropic-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-enthropic}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./infra/db/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - enthropic-net
+
+  redis:
+    image: redis:7-alpine
+    container_name: enthropic-redis
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - enthropic-net
+
+  nats:
+    image: nats:2.10-alpine
+    container_name: enthropic-nats
+    ports:
+      - "4222:4222"
+      - "8222:8222"  # Monitoring
+      - "6222:6222"  # Clustering
+    command: 
+      - "--jetstream"
+      - "--http_port=8222"
+      - "--cluster_name=enthropic-cluster"
+      - "--cluster=nats://0.0.0.0:6222"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8222/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - enthropic-net
+
+  vault:
+    image: hashicorp/vault:1.15
+    container_name: enthropic-vault
+    ports:
+      - "8200:8200"
+    environment:
+      VAULT_DEV_ROOT_TOKEN_ID: dev-token-123
+      VAULT_DEV_LISTEN_ADDRESS: 0.0.0.0:8200
+    cap_add:
+      - IPC_LOCK
+    networks:
+      - enthropic-net
+
+  # ===========================================
+  # PHASE 3: OBSERVABILITY STACK
+  # ===========================================
+  prometheus:
+    image: prom/prometheus:v2.48.0
+    container_name: enthropic-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./infra/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./infra/monitoring/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.enable-lifecycle'
+      - '--web.enable-admin-api'
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:9090/-/healthy"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    networks:
+      - enthropic-net
+
+  grafana:
+    image: grafana/grafana:10.2.2
+    container_name: enthropic-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin123
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./infra/monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./infra/monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - prometheus
+    networks:
+      - enthropic-net
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.52
+    container_name: enthropic-jaeger
+    ports:
+      - "16686:16686"  # UI
+      - "4317:4317"    # OTLP gRPC
+      - "4318:4318"    # OTLP HTTP
+      - "14268:14268"  # Jaeger thrift
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    networks:
+      - enthropic-net
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.91.0
+    container_name: enthropic-otel-collector
+    ports:
+      - "4319:4317"    # OTLP gRPC (external)
+      - "4320:4318"    # OTLP HTTP (external)
+      - "8888:8888"    # Prometheus metrics
+      - "8889:8889"    # Prometheus exporter
+    volumes:
+      - ./infra/monitoring/otel-collector.yml:/etc/otelcol-contrib/config.yaml:ro
+    command: ["--config=/etc/otelcol-contrib/config.yaml"]
+    depends_on:
+      - jaeger
+      - prometheus
+    networks:
+      - enthropic-net
+
+  # ===========================================
+  # APPLICATION SERVICES
+  # ===========================================
+  execution-core:
+    build:
+      context: .
+      dockerfile: infra/docker/execution-core.Dockerfile
+    container_name: enthropic-execution-core
+    environment:
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/enthropic
+      NATS_URL: nats://nats:4222
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: ${JWT_SECRET:-your-super-secret-jwt-key-change-in-production-minimum-32-chars}
+      RUST_LOG: info,execution_core=debug
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_SERVICE_NAME: execution-core
+      METRICS_PORT: 9100
+    ports:
+      - "9100:9100"  # Metrics
+    depends_on:
+      postgres:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9100/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    networks:
+      - enthropic-net
+
+  risk-service:
+    build:
+      context: .
+      dockerfile: infra/docker/risk-service.Dockerfile
+    container_name: enthropic-risk-service
+    environment:
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/enthropic
+      NATS_URL: nats://nats:4222
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: ${JWT_SECRET:-your-super-secret-jwt-key-change-in-production-minimum-32-chars}
+      PORT: 3001
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_SERVICE_NAME: risk-service
+    ports:
+      - "3001:3001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    networks:
+      - enthropic-net
+
+  strategy-service:
+    build:
+      context: .
+      dockerfile: infra/docker/strategy-service.Dockerfile
+    container_name: enthropic-strategy-service
+    environment:
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/enthropic
+      NATS_URL: nats://nats:4222
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: ${JWT_SECRET:-your-super-secret-jwt-key-change-in-production-minimum-32-chars}
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_SERVICE_NAME: strategy-service
+      METRICS_PORT: 9102
+    ports:
+      - "9102:9102"  # Metrics
+    depends_on:
+      postgres:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9102/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    networks:
+      - enthropic-net
+
+  nats-gateway:
+    build:
+      context: .
+      dockerfile: infra/docker/nats-gateway.Dockerfile
+    container_name: enthropic-nats-gateway
+    environment:
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/enthropic
+      NATS_URL: nats://nats:4222
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: ${JWT_SECRET:-your-super-secret-jwt-key-change-in-production-minimum-32-chars}
+      PORT: 3002
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_SERVICE_NAME: nats-gateway
+    ports:
+      - "3002:3002"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3002/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    networks:
+      - enthropic-net
+
+  dashboard:
+    build:
+      context: .
+      dockerfile: infra/docker/dashboard.Dockerfile
+    container_name: enthropic-dashboard
+    ports:
+      - "5173:80"
+    depends_on:
+      - nats-gateway
+      - risk-service
+    networks:
+      - enthropic-net
+
+volumes:
+  postgres_data:
+  redis_data:
+  prometheus_data:
+  grafana_data:
+
+networks:
+  enthropic-net:
+    driver: bridge

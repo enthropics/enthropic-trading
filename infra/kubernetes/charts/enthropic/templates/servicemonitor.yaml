@@ -1,0 +1,19 @@
+{{- if .Values.monitoring.prometheus.serviceMonitor.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "enthropic.fullname" . }}
+  labels:
+    {{- include "enthropic.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "enthropic.selectorLabels" . | nindent 6 }}
+  endpoints:
+    - port: metrics
+      interval: 15s
+      path: /metrics
+  namespaceSelector:
+    matchNames:
+      - {{ .Release.Namespace }}
+{{- end }}

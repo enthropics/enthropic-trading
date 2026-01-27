@@ -1,0 +1,65 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: 'enthropic-local'
+    env: 'development'
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: []
+
+rule_files:
+  - /etc/prometheus/alerts.yml
+
+scrape_configs:
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # OpenTelemetry Collector metrics
+  - job_name: 'otel-collector'
+    static_configs:
+      - targets: ['otel-collector:8888', 'otel-collector:8889']
+
+  # NATS monitoring
+  - job_name: 'nats'
+    static_configs:
+      - targets: ['nats:8222']
+    metrics_path: /metrics
+
+  # Execution Core (Rust)
+  - job_name: 'execution-core'
+    static_configs:
+      - targets: ['execution-core:9100']
+    metrics_path: /metrics
+
+  # Risk Service (NestJS)
+  - job_name: 'risk-service'
+    static_configs:
+      - targets: ['risk-service:3001']
+    metrics_path: /api/metrics
+
+  # Strategy Service (Python)
+  - job_name: 'strategy-service'
+    static_configs:
+      - targets: ['strategy-service:9102']
+    metrics_path: /metrics
+
+  # NATS Gateway
+  - job_name: 'nats-gateway'
+    static_configs:
+      - targets: ['nats-gateway:3002']
+    metrics_path: /metrics
+
+  # PostgreSQL exporter (if added later)
+  # - job_name: 'postgres'
+  #   static_configs:
+  #     - targets: ['postgres-exporter:9187']
+
+  # Redis exporter (if added later)
+  # - job_name: 'redis'
+  #   static_configs:
+  #     - targets: ['redis-exporter:9121']

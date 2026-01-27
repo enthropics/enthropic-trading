@@ -1,0 +1,38 @@
+syntax = "proto3";
+package enthropic.market;
+import "common.proto";
+
+message MarketTick {
+  string symbol = 1;
+  enthropic.common.Decimal bid_price = 2;
+  enthropic.common.Decimal ask_price = 3;
+  enthropic.common.Decimal bid_size = 4;
+  enthropic.common.Decimal ask_size = 5;
+  enthropic.common.Decimal last_price = 6;
+  enthropic.common.Decimal last_size = 7;
+  enthropic.common.Decimal volume = 8;
+  enthropic.common.Timestamp timestamp = 9;
+  string source = 10;
+}
+
+message Bar {
+  string symbol = 1;
+  enthropic.common.Decimal open = 2;
+  enthropic.common.Decimal high = 3;
+  enthropic.common.Decimal low = 4;
+  enthropic.common.Decimal close = 5;
+  enthropic.common.Decimal volume = 6;
+  enthropic.common.Decimal vwap = 7;
+  int64 trade_count = 8;
+  enthropic.common.Timestamp start_time = 9;
+  enthropic.common.Timestamp end_time = 10;
+  string interval = 11;
+}
+
+message BookLevel { enthropic.common.Decimal price = 1; enthropic.common.Decimal quantity = 2; int32 order_count = 3; }
+message OrderBook { string symbol = 1; repeated BookLevel bids = 2; repeated BookLevel asks = 3; enthropic.common.Timestamp timestamp = 4; int64 sequence = 5; }
+
+message SubscribeRequest { enthropic.common.AuthContext auth = 1; repeated string symbols = 2; repeated string channels = 3; }
+message UnsubscribeRequest { enthropic.common.AuthContext auth = 1; repeated string symbols = 2; repeated string channels = 3; }
+message GetHistoricalBarsRequest { enthropic.common.AuthContext auth = 1; string symbol = 2; string interval = 3; enthropic.common.Timestamp start_time = 4; enthropic.common.Timestamp end_time = 5; int32 limit = 6; }
+message BarList { repeated Bar bars = 1; bool has_more = 2; }

@@ -1,0 +1,11 @@
+apiVersion: 1
+
+providers:
+  - name: 'Enthropic Trading'
+    orgId: 1
+    folder: 'Trading Platform'
+    type: file
+    disableDeletion: false
+    editable: true
+    options:
+      path: /var/lib/grafana/dashboards

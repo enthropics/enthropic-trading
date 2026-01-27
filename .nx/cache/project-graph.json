@@ -1,0 +1,301 @@
+{
+  "nodes": {
+    "@enthropic/domain": {
+      "name": "@enthropic/domain",
+      "type": "lib",
+      "data": {
+        "root": "libs/shared/domain",
+        "targets": {
+          "nx-release-publish": {
+            "dependsOn": [
+              "^nx-release-publish"
+            ],
+            "executor": "@nx/js:release-publish",
+            "options": {},
+            "configurations": {}
+          }
+        },
+        "sourceRoot": "libs/shared/domain",
+        "name": "@enthropic/domain",
+        "projectType": "library",
+        "implicitDependencies": [],
+        "tags": []
+      }
+    },
+    "@enthropic/auth-service": {
+      "name": "@enthropic/auth-service",
+      "type": "lib",
+      "data": {
+        "root": "apps/auth-service",
+        "targets": {
+          "build": {
+            "dependsOn": [
+              "^build"
+            ],
+            "cache": true,
+            "executor": "nx:run-script",
+            "options": {
+              "script": "build"
+            },
+            "configurations": {}
+          },
+          "test": {
+            "cache": true,
+            "executor": "nx:run-script",
+            "options": {
+              "script": "test"
+            },
+            "configurations": {}
+          },
+          "start": {
+            "executor": "nx:run-script",
+            "options": {
+              "script": "start"
+            },
+            "configurations": {}
+          },
+          "start:dev": {
+            "executor": "nx:run-script",
+            "options": {
+              "script": "start:dev"
+            },
+            "configurations": {}
+          },
+          "start:prod": {
+            "executor": "nx:run-script",
+            "options": {
+              "script": "start:prod"
+            },
+            "configurations": {}
+          },
+          "lint": {
+            "executor": "nx:run-script",
+            "options": {
+              "script": "lint"
+            },
+            "configurations": {}
+          },
+          "prisma:generate": {
+            "executor": "nx:run-script",
+            "options": {
+              "script": "prisma:generate"
+            },
+            "configurations": {}
+          },
+          "prisma:migrate": {
+            "executor": "nx:run-script",
+            "options": {
+              "script": "prisma:migrate"
+            },
+            "configurations": {}
+          },
+          "nx-release-publish": {
+            "dependsOn": [
+              "^nx-release-publish"
+            ],
+            "executor": "@nx/js:release-publish",
+            "options": {},
+            "configurations": {}
+          }
+        },
+        "sourceRoot": "apps/auth-service",
+        "name": "@enthropic/auth-service",
+        "projectType": "library",
+        "implicitDependencies": [],
+        "tags": []
+      }
+    },
+    "@enthropic/nats-gateway": {
+      "name": "@enthropic/nats-gateway",
+      "type": "lib",
+      "data": {
+        "root": "apps/nats-gateway",
+        "targets": {
+          "build": {
+            "dependsOn": [
+              "^build"
+            ],
+            "cache": true,
+            "executor": "nx:run-script",
+            "options": {
+              "script": "build"
+            },
+            "configurations": {}
+          },
+          "start": {
+            "executor": "nx:run-script",
+            "options": {
+              "script": "start"
+            },
+            "configurations": {}
+          },
+          "dev": {
+            "executor": "nx:run-script",
+            "options": {
+              "script": "dev"
+            },
+            "configurations": {}
+          },
+          "lint": {
+            "executor": "nx:run-script",
+            "options": {
+              "script": "lint"
+            },
+            "configurations": {}
+          },
+          "nx-release-publish": {
+            "dependsOn": [
+              "^nx-release-publish"
+            ],
+            "executor": "@nx/js:release-publish",
+            "options": {},
+            "configurations": {}
+          }
+        },
+        "sourceRoot": "apps/nats-gateway",
+        "name": "@enthropic/nats-gateway",
+        "projectType": "library",
+        "implicitDependencies": [],
+        "tags": []
+      }
+    },
+    "@enthropic/risk-service": {
+      "name": "@enthropic/risk-service",
+      "type": "lib",
+      "data": {
+        "root": "apps/risk-service",
+        "targets": {
+          "build": {
+            "dependsOn": [
+              "^build"
+            ],
+            "cache": true,
+            "executor": "nx:run-script",
+            "options": {
+              "script": "build"
+            },
+            "configurations": {}
+          },
+          "test": {
+            "cache": true,
+            "executor": "nx:run-script",
+            "options": {
+              "script": "test"
+            },
+            "configurations": {}
+          },
+          "start": {
+            "executor": "nx:run-script",
+            "options": {
+              "script": "start"
+            },
+            "configurations": {}
+          },
+          "start:dev": {
+            "executor": "nx:run-script",
+            "options": {
+              "script": "start:dev"
+            },
+            "configurations": {}
+          },
+          "start:prod": {
+            "executor": "nx:run-script",
+            "options": {
+              "script": "start:prod"
+            },
+            "configurations": {}
+          },
+          "lint": {
+            "executor": "nx:run-script",
+            "options": {
+              "script": "lint"
+            },
+            "configurations": {}
+          },
+          "test:watch": {
+            "executor": "nx:run-script",
+            "options": {
+              "script": "test:watch"
+            },
+            "configurations": {}
+          },
+          "test:cov": {
+            "executor": "nx:run-script",
+            "options": {
+              "script": "test:cov"
+            },
+            "configurations": {}
+          },
+          "test:e2e": {
+            "executor": "nx:run-script",
+            "options": {
+              "script": "test:e2e"
+            },
+            "configurations": {}
+          },
+          "nx-release-publish": {
+            "dependsOn": [
+              "^nx-release-publish"
+            ],
+            "executor": "@nx/js:release-publish",
+            "options": {},
+            "configurations": {}
+          }
+        },
+        "sourceRoot": "apps/risk-service",
+        "name": "@enthropic/risk-service",
+        "projectType": "library",
+        "implicitDependencies": [],
+        "tags": []
+      }
+    },
+    "@enthropic/dashboard": {
+      "name": "@enthropic/dashboard",
+      "type": "lib",
+      "data": {
+        "root": "apps/dashboard",
+        "targets": {
+          "build": {
+            "dependsOn": [
+              "^build"
+            ],
+            "cache": true,
+            "executor": "nx:run-script",
+            "options": {
+              "script": "build"
+            },
+            "configurations": {}
+          },
+          "dev": {
+            "executor": "nx:run-script",
+            "options": {
+              "script": "dev"
+            },
+            "configurations": {}
+          },
+          "preview": {
+            "executor": "nx:run-script",
+            "options": {
+              "script": "preview"
+            },
+            "configurations": {}
+          }
+        },
+        "sourceRoot": "apps/dashboard",
+        "name": "@enthropic/dashboard",
+        "projectType": "library",
+        "implicitDependencies": [],
+        "tags": []
+      }
+    }
+  },
+  "externalNodes": {},
+  "dependencies": {
+    "@enthropic/domain": [],
+    "@enthropic/auth-service": [],
+    "@enthropic/nats-gateway": [],
+    "@enthropic/risk-service": [],
+    "@enthropic/dashboard": []
+  },
+  "version": "6.0"
+}

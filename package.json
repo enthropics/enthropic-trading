@@ -1,0 +1,21 @@
+{
+  "name": "enthropic-trading-platform",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Enterprise-grade trading platform with authentication",
+  "scripts": {
+    "setup": "./tools/scripts/setup-dev.sh",
+    "start": "./tools/scripts/run-all.sh",
+    "docker:up": "docker-compose up -d",
+    "docker:down": "docker-compose down",
+    "docker:logs": "docker-compose logs -f",
+    "proto:generate": "./tools/scripts/generate-protos.sh"
+  },
+  "devDependencies": {
+    "nx": "^17.2.0"
+  },
+  "workspaces": [
+    "apps/*",
+    "libs/shared/*"
+  ]
+}

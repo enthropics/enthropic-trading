@@ -1,0 +1,62 @@
+syntax = "proto3";
+package enthropic.execution;
+import "common.proto";
+import "orders.proto";
+
+message Trade {
+  string id = 1;
+  string buy_order_id = 2;
+  string sell_order_id = 3;
+  string symbol = 4;
+  enthropic.common.Decimal quantity = 5;
+  enthropic.common.Decimal price = 6;
+  string buyer_account_id = 7;
+  string seller_account_id = 8;
+  enthropic.common.Timestamp executed_at = 9;
+}
+
+message TradeNotification { Trade trade = 1; string source = 2; }
+
+message FillNotification {
+  string order_id = 1;
+  string account_id = 2;
+  string trade_id = 3;
+  string symbol = 4;
+  enthropic.orders.OrderSide side = 5;
+  enthropic.common.Decimal fill_quantity = 6;
+  enthropic.common.Decimal fill_price = 7;
+  enthropic.common.Decimal total_filled = 8;
+  enthropic.common.Decimal remaining = 9;
+  enthropic.orders.OrderStatus order_status = 10;
+  enthropic.common.Timestamp executed_at = 11;
+}
+
+message ExecutionReport {
+  string order_id = 1;
+  string client_order_id = 2;
+  string account_id = 3;
+  string symbol = 4;
+  enthropic.orders.OrderSide side = 5;
+  enthropic.orders.OrderType order_type = 6;
+  enthropic.orders.OrderStatus status = 7;
+  enthropic.common.Decimal order_quantity = 8;
+  enthropic.common.Decimal filled_quantity = 9;
+  enthropic.common.Decimal remaining_quantity = 10;
+  enthropic.common.Decimal avg_price = 11;
+  enthropic.common.Decimal last_fill_quantity = 12;
+  enthropic.common.Decimal last_fill_price = 13;
+  string last_trade_id = 14;
+  string exec_type = 15;
+  string text = 16;
+  enthropic.common.Timestamp transact_time = 17;
+}
+
+message GetTradesRequest {
+  enthropic.common.AuthContext auth = 1;
+  string symbol = 2;
+  enthropic.common.Timestamp start_time = 3;
+  enthropic.common.Timestamp end_time = 4;
+  int32 limit = 5;
+}
+
+message TradeList { repeated Trade trades = 1; bool has_more = 2; }

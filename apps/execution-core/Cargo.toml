@@ -1,0 +1,86 @@
+[package]
+name = "execution-core"
+version = "1.0.0"
+edition = "2021"
+description = "High-performance trading execution engine with observability"
+
+[dependencies]
+# Async runtime
+tokio = { version = "1.35", features = ["full", "tracing"] }
+
+# NATS messaging
+async-nats = "0.46"
+
+# Database
+sqlx = { version = "0.8", features = ["runtime-tokio", "postgres", "uuid", "chrono", "rust_decimal"] }
+
+# Redis
+redis = { version = "1.0", features = ["tokio-comp", "connection-manager"] }
+
+# Numeric types
+rust_decimal = { version = "1.33", features = ["serde"] }
+rust_decimal_macros = "1.33"
+
+# Core utilities
+uuid = { version = "1.6", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Authentication
+jsonwebtoken = { version = "10.2", default-features = true, features = ["use_pem"] }
+bcrypt = "0.18"
+sha2 = "0.10"
+hex = "0.4"
+
+# Error handling
+anyhow = "1.0"
+thiserror = "2.0"
+
+# Protocol buffers
+prost = "0.14"
+futures = "0.3"
+
+# Phase 3: Observability
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+tracing-opentelemetry = "0.32"
+opentelemetry = { version = "0.31", features = ["metrics", "trace"] }
+opentelemetry_sdk = { version = "0.31", features = ["rt-tokio", "metrics"] }
+opentelemetry-otlp = { version = "0.31", features = ["metrics", "tonic"] }
+opentelemetry-prometheus = "0.31"
+prometheus = "0.14"
+
+# Phase 3: Resilience
+tokio-retry = "0.3"
+backoff = { version = "0.4", features = ["tokio"] }
+
+# HTTP server for metrics/health
+axum = "0.8"
+tower = "0.5"
+tower-http = { version = "0.6", features = ["trace", "cors"] }
+
+[dev-dependencies]
+# Phase 4: Testing
+tokio-test = "0.4"
+criterion = { version = "0.8", features = ["async_tokio"] }
+mockall = "0.14"
+fake = { version = "4.4", features = ["derive"] }
+rstest = "0.26"
+
+[build-dependencies]
+prost-build = "0.14"
+
+# Force exact compatible time versions (note the "=" prefix for exact match)
+[patch.crates-io]
+time = { version = "=0.3.36" }
+time-core = { version = "=0.1.2" }
+time-macros = { version = "=0.2.18" }
+
+[profile.release]
+lto = true
+codegen-units = 1
+opt-level = 3
+
+[profile.bench]
+debug = true

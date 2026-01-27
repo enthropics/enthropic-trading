@@ -1,0 +1,52 @@
+[project]
+name = "strategy-service"
+version = "1.0.0"
+description = "Trading strategy service with observability"
+requires-python = ">=3.11"
+dependencies = [
+    "asyncio>=3.4.3",
+    "nats-py>=2.6.0",
+    "sqlalchemy[asyncio]>=2.0.25",
+    "asyncpg>=0.29.0",
+    "alembic>=1.13.1",
+    "pyjwt>=2.8.0",
+    "bcrypt>=4.1.2",
+    "redis>=5.0.1",
+    "pydantic>=2.5.3",
+    "pydantic-settings>=2.1.0",
+    "python-dotenv>=1.0.0",
+    "hvac>=2.1.0",
+    # Phase 3: Observability
+    "opentelemetry-api>=1.22.0",
+    "opentelemetry-sdk>=1.22.0",
+    "opentelemetry-exporter-otlp>=1.22.0",
+    "opentelemetry-instrumentation>=0.43b0",
+    "opentelemetry-instrumentation-asyncpg>=0.43b0",
+    "opentelemetry-instrumentation-redis>=0.43b0",
+    "prometheus-client>=0.19.0",
+    "structlog>=23.3.0",
+    # Phase 3: Resilience
+    "tenacity>=8.2.3",
+    "circuitbreaker>=2.0.0",
+    # HTTP server for health/metrics
+    "aiohttp>=3.9.1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.4",
+    "pytest-asyncio>=0.23.3",
+    "pytest-cov>=4.1.0",
+    "black>=23.12.1",
+    "mypy>=1.8.0",
+    "hypothesis>=6.92.0",
+    "locust>=2.20.0",
+]
+
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

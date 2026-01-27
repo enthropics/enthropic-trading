@@ -1,0 +1,98 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "enthropic.fullname" . }}-execution-core
+  labels:
+    {{- include "enthropic.labels" . | nindent 4 }}
+    app.kubernetes.io/component: execution-core
+spec:
+  {{- if not .Values.executionCore.autoscaling.enabled }}
+  replicas: {{ .Values.executionCore.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "enthropic.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: execution-core
+  template:
+    metadata:
+      labels:
+        {{- include "enthropic.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: execution-core
+    spec:
+      containers:
+        - name: execution-core
+          image: "{{ .Values.executionCore.image.repository }}:{{ .Values.executionCore.image.tag }}"
+          imagePullPolicy: {{ .Values.executionCore.image.pullPolicy }}
+          ports:
+            - name: metrics
+              containerPort: 9100
+              protocol: TCP
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.postgresql.external.existingSecret }}
+                  key: url
+            - name: NATS_URL
+              value: "nats://{{ include "enthropic.fullname" . }}-nats:4222"
+            - name: REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.redis.external.existingSecret }}
+                  key: url
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.jwtSecret.existingSecret }}
+                  key: {{ .Values.secrets.jwtSecret.key }}
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://otel-collector:4317"
+            - name: OTEL_SERVICE_NAME
+              value: "execution-core"
+            {{- range $key, $value := .Values.executionCore.env }}
+            - name: {{ $key }}
+              value: {{ $value | quote }}
+            {{- end }}
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: metrics
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: metrics
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          resources:
+            {{- toYaml .Values.executionCore.resources | nindent 12 }}
+---
+{{- if .Values.executionCore.autoscaling.enabled }}
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "enthropic.fullname" . }}-execution-core
+  labels:
+    {{- include "enthropic.labels" . | nindent 4 }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "enthropic.fullname" . }}-execution-core
+  minReplicas: {{ .Values.executionCore.autoscaling.minReplicas }}
+  maxReplicas: {{ .Values.executionCore.autoscaling.maxReplicas }}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.executionCore.autoscaling.targetCPUUtilizationPercentage }}
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.executionCore.autoscaling.targetMemoryUtilizationPercentage }}
+{{- end }}

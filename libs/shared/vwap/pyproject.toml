@@ -1,0 +1,9 @@
+[project]
+name = "enthropic-vwap"
+version = "1.0.0"
+description = "VWAP and TWAP calculators"
+requires-python = ">=3.11"
+
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
