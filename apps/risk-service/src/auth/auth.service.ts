@@ -1,22 +1,22 @@
-import { Injectable, UnauthorizedException, BadRequestException } from '@nestjs/common';
+import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcryptjs';
 import { createHash, randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import Redis from 'ioredis';
-import { LoginDto, TokenResponseDto, JwtPayload } from './auth.types';
+import { LoginDto, TokenResponseDto } from './auth.types';
 
 @Injectable()
 export class AuthService {
-  private redis: Redis;
-  private tokenExpiryMinutes: number;
-  private refreshTokenExpiryDays: number;
+  private readonly redis: Redis;
+  private readonly tokenExpiryMinutes: number;
+  private readonly refreshTokenExpiryDays: number;
 
   constructor(
-      private prisma: PrismaService,
-      private jwtService: JwtService,
-      private configService: ConfigService,
+      private readonly prisma: PrismaService,
+      private readonly jwtService: JwtService,
+      configService: ConfigService,
   ) {
     this.redis = new Redis(configService.get<string>('REDIS_URL') || 'redis://localhost:6379');
     this.tokenExpiryMinutes = configService.get<number>('TOKEN_EXPIRY_MINUTES', 15);
@@ -72,27 +72,30 @@ export class AuthService {
     // Generate tokens
     const permissions = account.role?.permissions.map((rp: any) => rp.permission.name) || [];
     const jti = randomUUID();
-    const now = Math.floor(Date.now() / 1000);
 
-    const payload: JwtPayload = {
+    const payload = {
       sub: account.id,
       username: account.username,
       role: account.role?.name || 'viewer',
       permissions,
-      exp: now + this.tokenExpiryMinutes * 60,
-      iat: now,
       jti,
     };
 
-    const accessToken = this.jwtService.sign(payload);
+    const accessToken = this.jwtService.sign(payload, {
+      expiresIn: `${this.tokenExpiryMinutes}m`,
+    });
+
     const refreshToken = await this.generateRefreshToken(account.id, ipAddress, userAgent);
 
     await this.logAuditEvent(account.id, 'login_success', { jti }, ipAddress, userAgent, true);
 
+    // Calculate expiresAt
+    const expiresAt = Math.floor(Date.now() / 1000) + (this.tokenExpiryMinutes * 60);
+
     return {
       accessToken,
       refreshToken,
-      expiresAt: payload.exp,
+      expiresAt,
       user: {
         id: account.id,
         username: account.username,
@@ -138,21 +141,22 @@ export class AuthService {
 
     const permissions = token.account.role?.permissions.map((rp: any) => rp.permission.name) || [];
     const jti = randomUUID();
-    const now = Math.floor(Date.now() / 1000);
 
-    const payload: JwtPayload = {
+    const payload = {
       sub: token.account.id,
       username: token.account.username,
       role: token.account.role?.name || 'viewer',
       permissions,
-      exp: now + this.tokenExpiryMinutes * 60,
-      iat: now,
       jti,
     };
 
-    const accessToken = this.jwtService.sign(payload);
+    const accessToken = this.jwtService.sign(payload, {
+      expiresIn: `${this.tokenExpiryMinutes}m`,
+    });
 
-    return { accessToken, expiresAt: payload.exp };
+    const expiresAt = Math.floor(Date.now() / 1000) + (this.tokenExpiryMinutes * 60);
+
+    return { accessToken, expiresAt };
   }
 
   async logout(jti: string, accountId: string): Promise<void> {

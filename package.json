@@ -12,10 +12,18 @@
     "proto:generate": "./tools/scripts/generate-protos.sh"
   },
   "devDependencies": {
+    "@types/bcrypt": "^6.0.0",
     "nx": "^17.2.0"
   },
   "workspaces": [
     "apps/*",
     "libs/shared/*"
-  ]
+  ],
+  "dependencies": {
+    "@nestjs/jwt": "^11.0.2",
+    "@nestjs/passport": "^11.0.5",
+    "bcrypt": "^6.0.0",
+    "passport": "^0.7.0",
+    "passport-jwt": "^4.0.1"
+  }
 }

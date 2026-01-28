@@ -1,4 +1,5 @@
-//! Configuration Module for Execution Core
+//! Configuration Module
+//! Loads settings from environment variables
 
 use std::env;
 
@@ -16,19 +17,19 @@ impl Config {
     pub fn from_env() -> anyhow::Result<Self> {
         Ok(Self {
             database_url: env::var("DATABASE_URL")
-                .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:5432/enthropic".into()),
+                .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:5432/enthropic".to_string()),
             nats_url: env::var("NATS_URL")
-                .unwrap_or_else(|_| "nats://localhost:4222".into()),
+                .unwrap_or_else(|_| "nats://localhost:4222".to_string()),
             redis_url: env::var("REDIS_URL")
-                .unwrap_or_else(|_| "redis://localhost:6379".into()),
+                .unwrap_or_else(|_| "redis://localhost:6379".to_string()),
             jwt_secret: env::var("JWT_SECRET")
-                .expect("JWT_SECRET must be set"),
+                .unwrap_or_else(|_| "your-super-secret-jwt-key-change-in-production-minimum-32-chars".to_string()),
             pool_min_connections: env::var("POOL_MIN_CONNECTIONS")
-                .unwrap_or_else(|_| "5".into())
+                .unwrap_or_else(|_| "5".to_string())
                 .parse()
                 .unwrap_or(5),
             pool_max_connections: env::var("POOL_MAX_CONNECTIONS")
-                .unwrap_or_else(|_| "20".into())
+                .unwrap_or_else(|_| "20".to_string())
                 .parse()
                 .unwrap_or(20),
         })

@@ -1,10 +1,14 @@
-//! Resilience Module - Phase 3: Fault Tolerance Patterns
-//! Circuit Breakers, Retry with Backoff, Bulkhead, Timeout
+//! Resilience Module - Circuit Breakers, Retries, Bulkheads
+//! Phase 3: Fault tolerance patterns for distributed trading systems
 
-pub mod circuit_breaker;
-pub mod retry;
-pub mod bulkhead;
+mod circuit_breaker;
+mod retry;
 
-pub use circuit_breaker::{CircuitBreaker, CircuitBreakerConfig, CircuitState};
-pub use retry::{RetryConfig, with_retry, with_retry_async};
-pub use bulkhead::{Bulkhead, BulkheadConfig};
+pub use circuit_breaker::{CircuitBreaker, CircuitBreakerConfig, CircuitBreakerState};
+pub use retry::{RetryConfig, with_retry_async};
+
+// Bulkhead is optional - only include if the file exists
+#[cfg(feature = "bulkhead")]
+mod bulkhead;
+#[cfg(feature = "bulkhead")]
+pub use bulkhead::Bulkhead;

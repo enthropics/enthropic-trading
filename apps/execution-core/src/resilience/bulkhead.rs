@@ -1,101 +1,108 @@
-//! Bulkhead Pattern
-//! Isolates failures by limiting concurrent operations
+//! Retry with Exponential Backoff
+//! Handles transient failures with configurable retry policies
 
-use std::sync::Arc;
-use tokio::sync::Semaphore;
-use tracing::{warn, instrument};
+use std::future::Future;
+use std::time::Duration;
+use tokio::time::sleep;
+use tracing::{debug, warn};
 
 #[derive(Debug, Clone)]
-pub struct BulkheadConfig {
-    /// Maximum concurrent operations
-    pub max_concurrent: usize,
-    /// Name for metrics/logging
-    pub name: String,
+pub struct RetryConfig {
+    pub max_attempts: u32,
+    pub initial_delay: Duration,
+    pub max_delay: Duration,
+    pub multiplier: f64,
+    pub jitter: bool,
 }
 
-impl Default for BulkheadConfig {
+impl Default for RetryConfig {
     fn default() -> Self {
         Self {
-            max_concurrent: 100,
-            name: "default".to_string(),
+            max_attempts: 3,
+            initial_delay: Duration::from_millis(100),
+            max_delay: Duration::from_secs(10),
+            multiplier: 2.0,
+            jitter: true,
         }
     }
 }
 
-pub struct Bulkhead {
-    semaphore: Arc<Semaphore>,
-    config: BulkheadConfig,
-}
+/// Execute an async function with retry logic
+pub async fn with_retry_async<F, Fut, T, E>(
+    operation: &str,
+    config: &RetryConfig,
+    mut f: F,
+) -> Result<T, E>
+where
+    F: FnMut() -> Fut,
+    Fut: Future<Output = Result<T, E>>,
+    E: std::fmt::Display,
+{
+    let mut attempt = 0;
+    let mut delay = config.initial_delay;
 
-impl Bulkhead {
-    pub fn new(config: BulkheadConfig) -> Self {
-        Self {
-            semaphore: Arc::new(Semaphore::new(config.max_concurrent)),
-            config,
-        }
-    }
+    loop {
+        attempt += 1;
 
-    /// Execute with bulkhead protection
-    #[instrument(skip(self, f), fields(bulkhead = %self.config.name))]
-    pub async fn execute<F, Fut, T>(&self, f: F) -> Result<T, BulkheadError>
-    where
-        F: FnOnce() -> Fut,
-        Fut: std::future::Future<Output = T>,
-    {
-        let permit = self.semaphore.try_acquire().map_err(|_| {
-            warn!(
-                bulkhead = %self.config.name,
-                max_concurrent = self.config.max_concurrent,
-                "Bulkhead full, rejecting request"
-            );
-            BulkheadError::Full
-        })?;
+        match f().await {
+            Ok(result) => {
+                if attempt > 1 {
+                    debug!(
+                        operation = operation,
+                        attempt = attempt,
+                        "Operation succeeded after retry"
+                    );
+                }
+                return Ok(result);
+            }
+            Err(e) => {
+                if attempt >= config.max_attempts {
+                    warn!(
+                        operation = operation,
+                        attempt = attempt,
+                        error = %e,
+                        "Operation failed after all retries"
+                    );
+                    return Err(e);
+                }
 
-        let result = f().await;
-        drop(permit);
-        Ok(result)
-    }
+                warn!(
+                    operation = operation,
+                    attempt = attempt,
+                    max_attempts = config.max_attempts,
+                    error = %e,
+                    delay_ms = delay.as_millis(),
+                    "Operation failed, retrying"
+                );
 
-    /// Execute with timeout
-    pub async fn execute_with_timeout<F, Fut, T>(
-        &self,
-        f: F,
-        timeout: std::time::Duration,
-    ) -> Result<T, BulkheadError>
-    where
-        F: FnOnce() -> Fut,
-        Fut: std::future::Future<Output = T>,
-    {
-        let permit = tokio::time::timeout(timeout, self.semaphore.acquire())
-            .await
-            .map_err(|_| BulkheadError::Timeout)?
-            .map_err(|_| BulkheadError::Closed)?;
+                // Add jitter if configured
+                let actual_delay = if config.jitter {
+                    let jitter = (rand_jitter() * delay.as_millis() as f64 * 0.3) as u64;
+                    Duration::from_millis(delay.as_millis() as u64 + jitter)
+                } else {
+                    delay
+                };
 
-        let result = f().await;
-        drop(permit);
-        Ok(result)
-    }
+                sleep(actual_delay).await;
 
-    pub fn available_permits(&self) -> usize {
-        self.semaphore.available_permits()
-    }
-}
-
-#[derive(Debug)]
-pub enum BulkheadError {
-    Full,
-    Timeout,
-    Closed,
-}
-
-impl std::fmt::Display for BulkheadError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            BulkheadError::Full => write!(f, "Bulkhead is full"),
-            BulkheadError::Timeout => write!(f, "Bulkhead timeout"),
-            BulkheadError::Closed => write!(f, "Bulkhead is closed"),
+                // Calculate next delay with exponential backoff
+                delay = Duration::from_millis(
+                    (delay.as_millis() as f64 * config.multiplier) as u64
+                );
+                if delay > config.max_delay {
+                    delay = config.max_delay;
+                }
+            }
         }
     }
 }
 
-impl std::error::Error for BulkheadError {}
+/// Simple pseudo-random jitter (deterministic for reproducibility)
+fn rand_jitter() -> f64 {
+    use std::time::SystemTime;
+    let nanos = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap_or_default()
+        .subsec_nanos();
+    (nanos as f64 % 1000.0) / 1000.0
+}

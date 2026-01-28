@@ -52,7 +52,7 @@ FROM nginx:alpine AS production
 # Copy built static files
 COPY --from=builder /app/apps/dashboard/dist /usr/share/nginx/html
 
-# Configure nginx for SPA routing
+# Configure nginx for SPA routing + API proxy
 RUN echo 'server { \
     listen 80; \
     server_name _; \
@@ -64,6 +64,19 @@ RUN echo 'server { \
     gzip_vary on; \
     gzip_min_length 1024; \
     gzip_types text/plain text/css text/xml text/javascript application/javascript application/xml+rss application/json; \
+    \
+    # Proxy API requests to backend \
+    location /api/ { \
+        proxy_pass http://risk-service:3001; \
+        proxy_http_version 1.1; \
+        proxy_set_header Upgrade $http_upgrade; \
+        proxy_set_header Connection "upgrade"; \
+        proxy_set_header Host $host; \
+        proxy_set_header X-Real-IP $remote_addr; \
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for; \
+        proxy_set_header X-Forwarded-Proto $scheme; \
+        proxy_cache_bypass $http_upgrade; \
+    } \
     \
     # Cache static assets \
     location ~* \\.(?:css|js|jpg|jpeg|gif|png|ico|svg|woff|woff2|ttf|eot)$ { \

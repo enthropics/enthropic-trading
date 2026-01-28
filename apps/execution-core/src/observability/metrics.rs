@@ -1,217 +1,144 @@
-//! Prometheus Metrics for Execution Core
-//! Trading-specific metrics: orders, positions, latency, circuit breakers
+//! Prometheus Metrics for Trading Platform
+//! Custom metrics for order processing, positions, and system health
 
+use once_cell::sync::Lazy;
 use prometheus::{
-    self, Counter, CounterVec, Gauge, GaugeVec, Histogram, HistogramVec,
+    Counter, CounterVec, Gauge, GaugeVec, HistogramVec,
     Opts, Registry, TextEncoder, Encoder,
 };
-use std::sync::OnceLock;
+use std::sync::Mutex;
 
-static REGISTRY: OnceLock<Registry> = OnceLock::new();
-static METRICS: OnceLock<TradingMetrics> = OnceLock::new();
+/// Global metrics registry
+static REGISTRY: Lazy<Registry> = Lazy::new(Registry::new);
 
-/// Trading-specific metrics collection
-#[derive(Clone)]
-pub struct TradingMetrics {
-    // Order metrics
-    pub orders_processed: CounterVec,
-    pub orders_rejected: CounterVec,
+/// Application metrics
+pub struct Metrics {
+    pub orders_processed_total: CounterVec,
+    pub orders_rejected_total: CounterVec,
     pub order_processing_duration: HistogramVec,
-    pub order_queue_depth: Gauge,
-    
-    // Position metrics
-    pub position_updates: Counter,
+    pub position_updates_total: Counter,
     pub active_positions: Gauge,
     pub position_pnl: GaugeVec,
-    
-    // Fill metrics
-    pub fills_total: CounterVec,
-    pub fill_rate: GaugeVec,
-    
-    // System metrics
     pub db_pool_connections: GaugeVec,
-    pub db_query_duration: HistogramVec,
-    
-    // NATS metrics
     pub nats_messages_received: CounterVec,
     pub nats_messages_published: CounterVec,
-    pub nats_message_processing_duration: HistogramVec,
-    
-    // Resilience metrics
     pub circuit_breaker_state: GaugeVec,
-    pub retry_attempts: CounterVec,
-    pub errors_total: CounterVec,
-    
-    // Auth metrics
-    pub auth_validations: CounterVec,
+    pub retry_attempts_total: CounterVec,
 }
 
-impl TradingMetrics {
-    fn new(registry: &Registry) -> Self {
-        // Order metrics
-        let orders_processed = CounterVec::new(
-            Opts::new("orders_processed_total", "Total orders processed"),
-            &["status", "side", "order_type", "symbol"],
-        ).unwrap();
-        registry.register(Box::new(orders_processed.clone())).unwrap();
+static METRICS: Lazy<Mutex<Option<Metrics>>> = Lazy::new(|| Mutex::new(None));
 
-        let orders_rejected = CounterVec::new(
-            Opts::new("orders_rejected_total", "Total orders rejected"),
-            &["reason"],
-        ).unwrap();
-        registry.register(Box::new(orders_rejected.clone())).unwrap();
+/// Initialize metrics
+pub fn init_metrics(service_name: &str) -> anyhow::Result<()> {
+    let orders_processed_total = CounterVec::new(
+        Opts::new("enthropic_orders_processed_total", "Total orders processed")
+            .namespace("enthropic")
+            .const_label("service", service_name),
+        &["status", "side", "symbol"]
+    )?;
 
-        let order_processing_duration = HistogramVec::new(
-            prometheus::HistogramOpts::new(
-                "order_processing_duration_seconds",
-                "Order processing latency in seconds",
-            ).buckets(vec![0.0001, 0.0005, 0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0]),
-            &["operation"],
-        ).unwrap();
-        registry.register(Box::new(order_processing_duration.clone())).unwrap();
+    let orders_rejected_total = CounterVec::new(
+        Opts::new("enthropic_orders_rejected_total", "Total orders rejected")
+            .namespace("enthropic")
+            .const_label("service", service_name),
+        &["reason"]
+    )?;
 
-        let order_queue_depth = Gauge::new("order_queue_depth", "Current order queue depth").unwrap();
-        registry.register(Box::new(order_queue_depth.clone())).unwrap();
+    let order_processing_duration = HistogramVec::new(
+        prometheus::HistogramOpts::new(
+            "enthropic_order_processing_duration_seconds",
+            "Order processing latency in seconds"
+        )
+            .namespace("enthropic")
+            .const_label("service", service_name)
+            .buckets(vec![0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0]),
+        &["operation"]
+    )?;
 
-        // Position metrics
-        let position_updates = Counter::new("position_updates_total", "Total position updates").unwrap();
-        registry.register(Box::new(position_updates.clone())).unwrap();
+    let position_updates_total = Counter::new(
+        "enthropic_position_updates_total",
+        "Total position updates"
+    )?;
 
-        let active_positions = Gauge::new("active_positions_total", "Number of active positions").unwrap();
-        registry.register(Box::new(active_positions.clone())).unwrap();
+    let active_positions = Gauge::new(
+        "enthropic_active_positions",
+        "Number of active positions"
+    )?;
 
-        let position_pnl = GaugeVec::new(
-            Opts::new("position_pnl", "Position P&L"),
-            &["account_id", "symbol", "pnl_type"],
-        ).unwrap();
-        registry.register(Box::new(position_pnl.clone())).unwrap();
+    let position_pnl = GaugeVec::new(
+        Opts::new("enthropic_position_pnl", "Position PnL by type"),
+        &["type"] // realized, unrealized
+    )?;
 
-        // Fill metrics
-        let fills_total = CounterVec::new(
-            Opts::new("fills_total", "Total fills executed"),
-            &["symbol", "side"],
-        ).unwrap();
-        registry.register(Box::new(fills_total.clone())).unwrap();
+    let db_pool_connections = GaugeVec::new(
+        Opts::new("enthropic_db_pool_connections", "Database pool connections"),
+        &["state"] // active, idle
+    )?;
 
-        let fill_rate = GaugeVec::new(
-            Opts::new("fill_rate", "Fill rate percentage"),
-            &["symbol"],
-        ).unwrap();
-        registry.register(Box::new(fill_rate.clone())).unwrap();
+    let nats_messages_received = CounterVec::new(
+        Opts::new("enthropic_nats_messages_received_total", "NATS messages received"),
+        &["subject"]
+    )?;
 
-        // System metrics
-        let db_pool_connections = GaugeVec::new(
-            Opts::new("db_pool_connections", "Database pool connections"),
-            &["state"],
-        ).unwrap();
-        registry.register(Box::new(db_pool_connections.clone())).unwrap();
+    let nats_messages_published = CounterVec::new(
+        Opts::new("enthropic_nats_messages_published_total", "NATS messages published"),
+        &["subject"]
+    )?;
 
-        let db_query_duration = HistogramVec::new(
-            prometheus::HistogramOpts::new(
-                "db_query_duration_seconds",
-                "Database query duration",
-            ).buckets(vec![0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5]),
-            &["query_type"],
-        ).unwrap();
-        registry.register(Box::new(db_query_duration.clone())).unwrap();
+    let circuit_breaker_state = GaugeVec::new(
+        Opts::new("enthropic_circuit_breaker_state", "Circuit breaker state (0=closed, 0.5=half-open, 1=open)"),
+        &["name"]
+    )?;
 
-        // NATS metrics
-        let nats_messages_received = CounterVec::new(
-            Opts::new("nats_messages_received_total", "NATS messages received"),
-            &["subject"],
-        ).unwrap();
-        registry.register(Box::new(nats_messages_received.clone())).unwrap();
+    let retry_attempts_total = CounterVec::new(
+        Opts::new("enthropic_retry_attempts_total", "Total retry attempts"),
+        &["operation", "outcome"]
+    )?;
 
-        let nats_messages_published = CounterVec::new(
-            Opts::new("nats_messages_published_total", "NATS messages published"),
-            &["subject"],
-        ).unwrap();
-        registry.register(Box::new(nats_messages_published.clone())).unwrap();
+    // Register all metrics
+    REGISTRY.register(Box::new(orders_processed_total.clone()))?;
+    REGISTRY.register(Box::new(orders_rejected_total.clone()))?;
+    REGISTRY.register(Box::new(order_processing_duration.clone()))?;
+    REGISTRY.register(Box::new(position_updates_total.clone()))?;
+    REGISTRY.register(Box::new(active_positions.clone()))?;
+    REGISTRY.register(Box::new(position_pnl.clone()))?;
+    REGISTRY.register(Box::new(db_pool_connections.clone()))?;
+    REGISTRY.register(Box::new(nats_messages_received.clone()))?;
+    REGISTRY.register(Box::new(nats_messages_published.clone()))?;
+    REGISTRY.register(Box::new(circuit_breaker_state.clone()))?;
+    REGISTRY.register(Box::new(retry_attempts_total.clone()))?;
 
-        let nats_message_processing_duration = HistogramVec::new(
-            prometheus::HistogramOpts::new(
-                "nats_message_processing_duration_seconds",
-                "NATS message processing duration",
-            ).buckets(vec![0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05, 0.1]),
-            &["subject"],
-        ).unwrap();
-        registry.register(Box::new(nats_message_processing_duration.clone())).unwrap();
+    let metrics = Metrics {
+        orders_processed_total,
+        orders_rejected_total,
+        order_processing_duration,
+        position_updates_total,
+        active_positions,
+        position_pnl,
+        db_pool_connections,
+        nats_messages_received,
+        nats_messages_published,
+        circuit_breaker_state,
+        retry_attempts_total,
+    };
 
-        // Resilience metrics
-        let circuit_breaker_state = GaugeVec::new(
-            Opts::new("circuit_breaker_state", "Circuit breaker state (0=closed, 0.5=half-open, 1=open)"),
-            &["name"],
-        ).unwrap();
-        registry.register(Box::new(circuit_breaker_state.clone())).unwrap();
+    let mut guard = METRICS.lock().unwrap();
+    *guard = Some(metrics);
 
-        let retry_attempts = CounterVec::new(
-            Opts::new("retry_attempts_total", "Retry attempts"),
-            &["operation", "outcome"],
-        ).unwrap();
-        registry.register(Box::new(retry_attempts.clone())).unwrap();
-
-        let errors_total = CounterVec::new(
-            Opts::new("errors_total", "Total errors"),
-            &["type", "service"],
-        ).unwrap();
-        registry.register(Box::new(errors_total.clone())).unwrap();
-
-        // Auth metrics
-        let auth_validations = CounterVec::new(
-            Opts::new("auth_validations_total", "Auth validation attempts"),
-            &["result"],
-        ).unwrap();
-        registry.register(Box::new(auth_validations.clone())).unwrap();
-
-        Self {
-            orders_processed,
-            orders_rejected,
-            order_processing_duration,
-            order_queue_depth,
-            position_updates,
-            active_positions,
-            position_pnl,
-            fills_total,
-            fill_rate,
-            db_pool_connections,
-            db_query_duration,
-            nats_messages_received,
-            nats_messages_published,
-            nats_message_processing_duration,
-            circuit_breaker_state,
-            retry_attempts,
-            errors_total,
-            auth_validations,
-        }
-    }
-}
-
-/// Initialize metrics system
-pub fn init_metrics() -> anyhow::Result<()> {
-    let registry = Registry::new();
-    let metrics = TradingMetrics::new(&registry);
-    
-    REGISTRY.set(registry).ok();
-    METRICS.set(metrics).ok();
-    
+    tracing::info!("Prometheus metrics initialized");
     Ok(())
 }
 
 /// Get metrics instance
-pub fn get_metrics() -> &'static TradingMetrics {
-    METRICS.get().expect("Metrics not initialized")
+pub fn get_metrics() -> std::sync::MutexGuard<'static, Option<Metrics>> {
+    METRICS.lock().unwrap()
 }
 
-/// Get registry
-pub fn get_registry() -> &'static Registry {
-    REGISTRY.get().expect("Registry not initialized")
-}
-
-/// Encode metrics for Prometheus scraping
+/// Encode metrics to Prometheus text format
 pub fn encode_metrics() -> String {
     let encoder = TextEncoder::new();
-    let metric_families = get_registry().gather();
+    let metric_families = REGISTRY.gather();
     let mut buffer = Vec::new();
-    encoder.encode(&metric_families, &mut buffer).unwrap();
-    String::from_utf8(buffer).unwrap()
+    encoder.encode(&metric_families, &mut buffer).unwrap_or_default();
+    String::from_utf8(buffer).unwrap_or_default()
 }

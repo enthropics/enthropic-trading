@@ -1,5 +1,3 @@
-version: '3.9'
-
 services:
   # ===========================================
   # INFRASTRUCTURE
@@ -46,12 +44,13 @@ services:
     ports:
       - "4222:4222"
       - "8222:8222"  # Monitoring
-      - "6222:6222"  # Clustering
-    command: 
+    command:
+      - "--name=enthropic-nats"
       - "--jetstream"
+      - "--store_dir=/data"
       - "--http_port=8222"
-      - "--cluster_name=enthropic-cluster"
-      - "--cluster=nats://0.0.0.0:6222"
+    volumes:
+      - nats_data:/data
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://localhost:8222/healthz"]
       interval: 5s
@@ -284,6 +283,7 @@ volumes:
   redis_data:
   prometheus_data:
   grafana_data:
+  nats_data:
 
 networks:
   enthropic-net:

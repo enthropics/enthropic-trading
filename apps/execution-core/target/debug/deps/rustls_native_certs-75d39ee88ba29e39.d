@@ -1,0 +1,8 @@
+D:\enth\apps\execution-core\target\debug\deps\rustls_native_certs-75d39ee88ba29e39.d: C:\Users\rafli\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\rustls-native-certs-0.7.3\src\lib.rs C:\Users\rafli\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\rustls-native-certs-0.7.3\src\windows.rs
+
+D:\enth\apps\execution-core\target\debug\deps\librustls_native_certs-75d39ee88ba29e39.rlib: C:\Users\rafli\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\rustls-native-certs-0.7.3\src\lib.rs C:\Users\rafli\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\rustls-native-certs-0.7.3\src\windows.rs
+
+D:\enth\apps\execution-core\target\debug\deps\librustls_native_certs-75d39ee88ba29e39.rmeta: C:\Users\rafli\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\rustls-native-certs-0.7.3\src\lib.rs C:\Users\rafli\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\rustls-native-certs-0.7.3\src\windows.rs
+
+C:\Users\rafli\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\rustls-native-certs-0.7.3\src\lib.rs:
+C:\Users\rafli\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\rustls-native-certs-0.7.3\src\windows.rs:

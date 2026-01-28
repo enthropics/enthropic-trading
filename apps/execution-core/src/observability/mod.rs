@@ -1,29 +1,27 @@
-//! Observability Module - Phase 3: Enterprise-Grade Observability
-//! OpenTelemetry Tracing, Prometheus Metrics, Structured JSON Logging
+//! Observability Module - OpenTelemetry Tracing, Metrics, Structured Logging
+//! Phase 3: Enterprise-grade observability for trading systems
 
 pub mod metrics;
 pub mod tracing_setup;
 pub mod health;
 
-use std::env;
+use opentelemetry::global;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
-/// Initialize the complete observability stack
+/// Initialize complete observability stack
 pub fn init_observability(service_name: &str) -> anyhow::Result<()> {
-    // Initialize tracing with OpenTelemetry
+    // Initialize tracing with OTLP exporter
     let tracer = tracing_setup::init_tracer(service_name)?;
-    
-    // Initialize Prometheus metrics
-    metrics::init_metrics()?;
-    
-    // Setup tracing subscriber with multiple layers
-    let telemetry_layer = tracing_opentelemetry::layer().with_tracer(tracer);
-    
-    // Environment filter for log levels
-    let env_filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| EnvFilter::new("info,execution_core=debug,tower_http=debug"));
 
-    // JSON formatted logs for production
+    // Initialize metrics
+    metrics::init_metrics(service_name)?;
+
+    // Setup tracing subscriber with JSON formatting
+    let telemetry_layer = tracing_opentelemetry::layer().with_tracer(tracer);
+
+    let env_filter = EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| EnvFilter::new("info,execution_core=debug"));
+
     let json_layer = tracing_subscriber::fmt::layer()
         .json()
         .with_current_span(true)
@@ -31,8 +29,7 @@ pub fn init_observability(service_name: &str) -> anyhow::Result<()> {
         .with_file(true)
         .with_line_number(true)
         .with_thread_ids(true)
-        .with_thread_names(true)
-        .with_target(true);
+        .with_thread_names(true);
 
     tracing_subscriber::registry()
         .with(env_filter)
@@ -41,16 +38,15 @@ pub fn init_observability(service_name: &str) -> anyhow::Result<()> {
         .init();
 
     tracing::info!(
-        service.name = service_name,
-        service.version = env!("CARGO_PKG_VERSION"),
+        service = service_name,
         "Observability stack initialized"
     );
 
     Ok(())
 }
 
-/// Graceful shutdown of observability providers
+/// Graceful shutdown of observability
 pub fn shutdown_observability() {
-    tracing::info!("Shutting down observability providers...");
-    opentelemetry::global::shutdown_tracer_provider();
+    tracing::info!("Shutting down observability...");
+    global::shutdown_tracer_provider();
 }

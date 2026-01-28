@@ -1,0 +1,16 @@
+D:\enth\apps\execution-core\target\debug\deps\opentelemetry_otlp-7fb0ea5573a76ffb.d: C:\Users\rafli\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\opentelemetry-otlp-0.31.0\src\lib.rs C:\Users\rafli\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\opentelemetry-otlp-0.31.0\src\exporter\mod.rs C:\Users\rafli\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\opentelemetry-otlp-0.31.0\src\exporter\http\mod.rs C:\Users\rafli\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\opentelemetry-otlp-0.31.0\src\exporter\http\metrics.rs C:\Users\rafli\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\opentelemetry-otlp-0.31.0\src\exporter\http\logs.rs C:\Users\rafli\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\opentelemetry-otlp-0.31.0\src\exporter\http\trace.rs C:\Users\rafli\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\opentelemetry-otlp-0.31.0\src\logs.rs C:\Users\rafli\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\opentelemetry-otlp-0.31.0\src\metric.rs C:\Users\rafli\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\opentelemetry-otlp-0.31.0\src\span.rs
+
+D:\enth\apps\execution-core\target\debug\deps\libopentelemetry_otlp-7fb0ea5573a76ffb.rmeta: C:\Users\rafli\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\opentelemetry-otlp-0.31.0\src\lib.rs C:\Users\rafli\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\opentelemetry-otlp-0.31.0\src\exporter\mod.rs C:\Users\rafli\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\opentelemetry-otlp-0.31.0\src\exporter\http\mod.rs C:\Users\rafli\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\opentelemetry-otlp-0.31.0\src\exporter\http\metrics.rs C:\Users\rafli\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\opentelemetry-otlp-0.31.0\src\exporter\http\logs.rs C:\Users\rafli\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\opentelemetry-otlp-0.31.0\src\exporter\http\trace.rs C:\Users\rafli\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\opentelemetry-otlp-0.31.0\src\logs.rs C:\Users\rafli\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\opentelemetry-otlp-0.31.0\src\metric.rs C:\Users\rafli\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\opentelemetry-otlp-0.31.0\src\span.rs
+
+C:\Users\rafli\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\opentelemetry-otlp-0.31.0\src\lib.rs:
+C:\Users\rafli\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\opentelemetry-otlp-0.31.0\src\exporter\mod.rs:
+C:\Users\rafli\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\opentelemetry-otlp-0.31.0\src\exporter\http\mod.rs:
+C:\Users\rafli\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\opentelemetry-otlp-0.31.0\src\exporter\http\metrics.rs:
+C:\Users\rafli\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\opentelemetry-otlp-0.31.0\src\exporter\http\logs.rs:
+C:\Users\rafli\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\opentelemetry-otlp-0.31.0\src\exporter\http\trace.rs:
+C:\Users\rafli\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\opentelemetry-otlp-0.31.0\src\logs.rs:
+C:\Users\rafli\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\opentelemetry-otlp-0.31.0\src\metric.rs:
+C:\Users\rafli\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\opentelemetry-otlp-0.31.0\src\span.rs:
+
+# env-dep:CARGO_PKG_NAME=opentelemetry-otlp
+# env-dep:CARGO_PKG_VERSION=0.31.0

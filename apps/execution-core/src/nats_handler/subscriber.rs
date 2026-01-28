@@ -1,14 +1,15 @@
 //! NATS Message Handler with Authentication
 //! Phase 2: Validates auth context in every message
 
-use crate::auth::{AuthContext, AuthService, AuthError};
+use crate::auth::{AuthContext, AuthService};
 use crate::engine::{OrderProcessor, PositionKeeper};
-use crate::engine::order_processor::NewOrderRequest;
-use async_nats::{Client, Subscriber};
+use crate::engine::order_processor::{NewOrderRequest, OrderResult};
+use async_nats::Client;
 use futures::StreamExt;
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 use std::sync::Arc;
+use std::collections::HashSet;
 use uuid::Uuid;
 
 #[derive(Debug, Deserialize)]
@@ -32,7 +33,7 @@ impl From<AuthPayload> for AuthContext {
             account_id: Uuid::parse_str(&p.account_id).unwrap_or_default(),
             username: p.username,
             role: p.role,
-            permissions: p.permissions.into_iter().collect(),
+            permissions: p.permissions.into_iter().collect::<HashSet<String>>(),
             token_jti: String::new(),
         }
     }
@@ -47,9 +48,11 @@ struct OrderResponse {
 
 pub struct NatsSubscriber {
     client: Client,
+    #[allow(dead_code)]
     pool: PgPool,
     order_processor: Arc<OrderProcessor>,
     position_keeper: Arc<PositionKeeper>,
+    #[allow(dead_code)]
     auth_service: Arc<AuthService>,
 }
 
@@ -100,7 +103,7 @@ impl NatsSubscriber {
     }
 
     async fn handle_order_submit(&self, msg: async_nats::Message) {
-        let result: Result<AuthenticatedMessage<NewOrderRequest>, _> = 
+        let result: Result<AuthenticatedMessage<NewOrderRequest>, _> =
             serde_json::from_slice(&msg.payload);
 
         let response = match result {
@@ -108,21 +111,21 @@ impl NatsSubscriber {
                 let auth_ctx: AuthContext = authenticated_msg.auth.into();
                 match self.order_processor.submit_order(&auth_ctx, authenticated_msg.data).await {
                     Ok(order_result) => match order_result {
-                        crate::engine::order_processor::OrderResult::Accepted(order) => {
+                        OrderResult::Accepted(order) => {
                             OrderResponse {
                                 success: true,
                                 order_id: Some(order.id.to_string()),
                                 error: None,
                             }
                         }
-                        crate::engine::order_processor::OrderResult::Rejected { reason, .. } => {
+                        OrderResult::Rejected { reason, .. } => {
                             OrderResponse {
                                 success: false,
                                 order_id: None,
                                 error: Some(reason),
                             }
                         }
-                        crate::engine::order_processor::OrderResult::Duplicate(order) => {
+                        OrderResult::Duplicate(order) => {
                             OrderResponse {
                                 success: true,
                                 order_id: Some(order.id.to_string()),
@@ -145,14 +148,13 @@ impl NatsSubscriber {
         };
 
         if let Some(reply) = msg.reply {
-            let _ = self.client.publish(reply, serde_json::to_vec(&response).unwrap().into()).await;
+            let payload = serde_json::to_vec(&response).unwrap_or_default();
+            let _ = self.client.publish(reply, payload.into()).await;
         }
 
         // Publish execution report
-        let _ = self.client.publish(
-            "execution.reports",
-            serde_json::to_vec(&response).unwrap().into()
-        ).await;
+        let payload = serde_json::to_vec(&response).unwrap_or_default();
+        let _ = self.client.publish("execution.reports", payload.into()).await;
     }
 
     async fn handle_order_cancel(&self, msg: async_nats::Message) {
@@ -161,14 +163,14 @@ impl NatsSubscriber {
             order_id: String,
         }
 
-        let result: Result<AuthenticatedMessage<CancelRequest>, _> = 
+        let result: Result<AuthenticatedMessage<CancelRequest>, _> =
             serde_json::from_slice(&msg.payload);
 
         let response = match result {
             Ok(authenticated_msg) => {
                 let auth_ctx: AuthContext = authenticated_msg.auth.into();
                 let order_id = Uuid::parse_str(&authenticated_msg.data.order_id);
-                
+
                 match order_id {
                     Ok(id) => match self.order_processor.cancel_order(&auth_ctx, id).await {
                         Ok(Some(order)) => OrderResponse {
@@ -202,17 +204,19 @@ impl NatsSubscriber {
         };
 
         if let Some(reply) = msg.reply {
-            let _ = self.client.publish(reply, serde_json::to_vec(&response).unwrap().into()).await;
+            let payload = serde_json::to_vec(&response).unwrap_or_default();
+            let _ = self.client.publish(reply, payload.into()).await;
         }
     }
 
     async fn handle_position_query(&self, msg: async_nats::Message) {
         #[derive(Deserialize)]
         struct PositionQuery {
+            #[allow(dead_code)]
             symbol: Option<String>,
         }
 
-        let result: Result<AuthenticatedMessage<PositionQuery>, _> = 
+        let result: Result<AuthenticatedMessage<PositionQuery>, _> =
             serde_json::from_slice(&msg.payload);
 
         let response = match result {
@@ -236,7 +240,8 @@ impl NatsSubscriber {
         };
 
         if let Some(reply) = msg.reply {
-            let _ = self.client.publish(reply, serde_json::to_vec(&response).unwrap().into()).await;
+            let payload = serde_json::to_vec(&response).unwrap_or_default();
+            let _ = self.client.publish(reply, payload.into()).await;
         }
     }
 }

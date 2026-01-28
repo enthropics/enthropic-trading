@@ -1,29 +1,24 @@
 //! Retry with Exponential Backoff
-//! Handles transient failures in database/NATS connections
+//! Handles transient failures with configurable retry policies
 
-use crate::observability::metrics::get_metrics;
+use std::future::Future;
 use std::time::Duration;
 use tokio::time::sleep;
-use tracing::{info, warn, instrument};
+use tracing::{debug, warn};
 
 #[derive(Debug, Clone)]
 pub struct RetryConfig {
-    /// Maximum number of retry attempts
-    pub max_retries: u32,
-    /// Initial delay between retries
+    pub max_attempts: u32,
     pub initial_delay: Duration,
-    /// Maximum delay between retries
     pub max_delay: Duration,
-    /// Multiplier for exponential backoff
     pub multiplier: f64,
-    /// Add jitter to prevent thundering herd
     pub jitter: bool,
 }
 
 impl Default for RetryConfig {
     fn default() -> Self {
         Self {
-            max_retries: 3,
+            max_attempts: 3,
             initial_delay: Duration::from_millis(100),
             max_delay: Duration::from_secs(10),
             multiplier: 2.0,
@@ -32,43 +27,7 @@ impl Default for RetryConfig {
     }
 }
 
-impl RetryConfig {
-    /// Quick retries for low-latency operations
-    pub fn fast() -> Self {
-        Self {
-            max_retries: 3,
-            initial_delay: Duration::from_millis(10),
-            max_delay: Duration::from_millis(100),
-            multiplier: 2.0,
-            jitter: true,
-        }
-    }
-
-    /// Slow retries for external services
-    pub fn slow() -> Self {
-        Self {
-            max_retries: 5,
-            initial_delay: Duration::from_millis(500),
-            max_delay: Duration::from_secs(30),
-            multiplier: 2.0,
-            jitter: true,
-        }
-    }
-
-    /// Database connection retries
-    pub fn database() -> Self {
-        Self {
-            max_retries: 5,
-            initial_delay: Duration::from_millis(100),
-            max_delay: Duration::from_secs(5),
-            multiplier: 2.0,
-            jitter: true,
-        }
-    }
-}
-
-/// Execute an async function with retry and exponential backoff
-#[instrument(skip(f), fields(operation = %operation))]
+/// Execute an async function with retry logic
 pub async fn with_retry_async<F, Fut, T, E>(
     operation: &str,
     config: &RetryConfig,
@@ -76,7 +35,7 @@ pub async fn with_retry_async<F, Fut, T, E>(
 ) -> Result<T, E>
 where
     F: FnMut() -> Fut,
-    Fut: std::future::Future<Output = Result<T, E>>,
+    Fut: Future<Output = Result<T, E>>,
     E: std::fmt::Display,
 {
     let mut attempt = 0;
@@ -84,16 +43,12 @@ where
 
     loop {
         attempt += 1;
-        
+
         match f().await {
             Ok(result) => {
                 if attempt > 1 {
-                    get_metrics()
-                        .retry_attempts
-                        .with_label_values(&[operation, "success"])
-                        .inc();
-                    info!(
-                        operation = %operation,
+                    debug!(
+                        operation = operation,
                         attempt = attempt,
                         "Operation succeeded after retry"
                     );
@@ -101,111 +56,53 @@ where
                 return Ok(result);
             }
             Err(e) => {
-                get_metrics()
-                    .retry_attempts
-                    .with_label_values(&[operation, "failure"])
-                    .inc();
-
-                if attempt >= config.max_retries {
+                if attempt >= config.max_attempts {
                     warn!(
-                        operation = %operation,
+                        operation = operation,
                         attempt = attempt,
-                        max_retries = config.max_retries,
                         error = %e,
-                        "Operation failed after max retries"
+                        "Operation failed after all retries"
                     );
                     return Err(e);
                 }
 
+                warn!(
+                    operation = operation,
+                    attempt = attempt,
+                    max_attempts = config.max_attempts,
+                    error = %e,
+                    delay_ms = delay.as_millis(),
+                    "Operation failed, retrying"
+                );
+
+                // Add jitter if configured
                 let actual_delay = if config.jitter {
-                    add_jitter(delay)
+                    let jitter = (rand_jitter() * delay.as_millis() as f64 * 0.3) as u64;
+                    Duration::from_millis(delay.as_millis() as u64 + jitter)
                 } else {
                     delay
                 };
 
-                warn!(
-                    operation = %operation,
-                    attempt = attempt,
-                    error = %e,
-                    delay_ms = actual_delay.as_millis(),
-                    "Operation failed, retrying..."
-                );
-
                 sleep(actual_delay).await;
-                
+
                 // Calculate next delay with exponential backoff
                 delay = Duration::from_millis(
-                    ((delay.as_millis() as f64 * config.multiplier) as u64)
-                        .min(config.max_delay.as_millis() as u64)
+                    (delay.as_millis() as f64 * config.multiplier) as u64
                 );
+                if delay > config.max_delay {
+                    delay = config.max_delay;
+                }
             }
         }
     }
 }
 
-/// Synchronous retry (mainly for initialization)
-pub fn with_retry<F, T, E>(
-    operation: &str,
-    config: &RetryConfig,
-    mut f: F,
-) -> Result<T, E>
-where
-    F: FnMut() -> Result<T, E>,
-    E: std::fmt::Display,
-{
-    let mut attempt = 0;
-    let mut delay = config.initial_delay;
-
-    loop {
-        attempt += 1;
-        
-        match f() {
-            Ok(result) => {
-                if attempt > 1 {
-                    tracing::info!(
-                        operation = %operation,
-                        attempt = attempt,
-                        "Operation succeeded after retry"
-                    );
-                }
-                return Ok(result);
-            }
-            Err(e) => {
-                if attempt >= config.max_retries {
-                    tracing::warn!(
-                        operation = %operation,
-                        attempt = attempt,
-                        error = %e,
-                        "Operation failed after max retries"
-                    );
-                    return Err(e);
-                }
-
-                tracing::warn!(
-                    operation = %operation,
-                    attempt = attempt,
-                    error = %e,
-                    delay_ms = delay.as_millis(),
-                    "Operation failed, retrying..."
-                );
-
-                std::thread::sleep(delay);
-                delay = Duration::from_millis(
-                    ((delay.as_millis() as f64 * config.multiplier) as u64)
-                        .min(config.max_delay.as_millis() as u64)
-                );
-            }
-        }
-    }
-}
-
-fn add_jitter(delay: Duration) -> Duration {
-    use std::time::{SystemTime, UNIX_EPOCH};
+/// Simple pseudo-random jitter (deterministic for reproducibility)
+fn rand_jitter() -> f64 {
+    use std::time::SystemTime;
     let nanos = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .subsec_nanos() as u64;
-    let jitter_percent = (nanos % 30) as f64 / 100.0; // 0-30% jitter
-    let jitter = (delay.as_millis() as f64 * jitter_percent) as u64;
-    delay + Duration::from_millis(jitter)
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap_or_default()
+        .subsec_nanos();
+    (nanos as f64 % 1000.0) / 1000.0
 }

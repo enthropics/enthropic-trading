@@ -1,6 +1,7 @@
 //! Unit Tests for Position Keeper
-//! Phase 4: Position calculation tests
+//! Phase 4: Position calculation tests - without signum()
 
+use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
 use uuid::Uuid;
 
@@ -8,14 +9,30 @@ use uuid::Uuid;
 mod position_tests {
     use super::*;
 
+    /// Helper function to get sign multiplier (replaces signum)
+    fn sign_of(d: Decimal) -> Decimal {
+        if d > dec!(0) {
+            dec!(1)
+        } else if d < dec!(0) {
+            dec!(-1)
+        } else {
+            dec!(0)
+        }
+    }
+
+    /// Check if two decimals have the same sign
+    fn same_sign(a: Decimal, b: Decimal) -> bool {
+        (a > dec!(0) && b > dec!(0)) || (a < dec!(0) && b < dec!(0))
+    }
+
     #[derive(Debug, Clone)]
     struct Position {
         account_id: Uuid,
         symbol: String,
-        quantity: rust_decimal::Decimal,
-        avg_price: rust_decimal::Decimal,
-        realized_pnl: rust_decimal::Decimal,
-        unrealized_pnl: rust_decimal::Decimal,
+        quantity: Decimal,
+        avg_price: Decimal,
+        realized_pnl: Decimal,
+        unrealized_pnl: Decimal,
     }
 
     impl Position {
@@ -30,7 +47,7 @@ mod position_tests {
             }
         }
 
-        fn apply_fill(&mut self, qty: rust_decimal::Decimal, price: rust_decimal::Decimal, is_buy: bool) {
+        fn apply_fill(&mut self, qty: Decimal, price: Decimal, is_buy: bool) {
             let signed_qty = if is_buy { qty } else { -qty };
             let old_qty = self.quantity;
             let new_qty = old_qty + signed_qty;
@@ -38,19 +55,23 @@ mod position_tests {
             if old_qty == dec!(0) {
                 // New position
                 self.avg_price = price;
-            } else if old_qty.signum() == signed_qty.signum() {
+            } else if same_sign(old_qty, signed_qty) {
                 // Increasing position - calculate weighted average
                 let old_value = old_qty.abs() * self.avg_price;
                 let new_value = qty * price;
                 self.avg_price = (old_value + new_value) / new_qty.abs();
-            } else if new_qty.abs() < old_qty.abs() {
+            } else if new_qty.abs() < old_qty.abs() && same_sign(new_qty, old_qty) {
                 // Reducing position - realize P&L
-                let realized = qty * (price - self.avg_price) * old_qty.signum();
+                let realized = qty * (price - self.avg_price) * sign_of(old_qty);
                 self.realized_pnl += realized;
-            } else if new_qty.signum() != old_qty.signum() {
+            } else if new_qty == dec!(0) {
+                // Closing completely
+                let realized = old_qty.abs() * (price - self.avg_price) * sign_of(old_qty);
+                self.realized_pnl += realized;
+            } else if !same_sign(new_qty, old_qty) && old_qty != dec!(0) {
                 // Crossing zero - close old position, open new
                 let close_qty = old_qty.abs();
-                let realized = close_qty * (price - self.avg_price) * old_qty.signum();
+                let realized = close_qty * (price - self.avg_price) * sign_of(old_qty);
                 self.realized_pnl += realized;
                 self.avg_price = price;
             }
@@ -58,7 +79,7 @@ mod position_tests {
             self.quantity = new_qty;
         }
 
-        fn update_unrealized_pnl(&mut self, market_price: rust_decimal::Decimal) {
+        fn update_unrealized_pnl(&mut self, market_price: Decimal) {
             if self.quantity != dec!(0) {
                 self.unrealized_pnl = self.quantity * (market_price - self.avg_price);
             } else {
@@ -144,6 +165,18 @@ mod position_tests {
         pos.apply_fill(dec!(1.0), dec!(50000), false); // Short
         pos.update_unrealized_pnl(dec!(48000)); // Price went down = profit
 
-        assert_eq!(pos.unrealized_pnl, dec!(2000)); // -1 * (48000 - 50000) = 2000
+        // unrealized = quantity * (market - avg) = -1 * (48000 - 50000) = 2000
+        assert_eq!(pos.unrealized_pnl, dec!(2000));
+    }
+
+    #[test]
+    fn test_increase_short_position() {
+        let mut pos = Position::new(Uuid::new_v4(), "BTC-USD");
+        pos.apply_fill(dec!(1.0), dec!(50000), false); // Short 1 @ 50000
+        pos.apply_fill(dec!(1.0), dec!(51000), false); // Short 1 more @ 51000
+
+        assert_eq!(pos.quantity, dec!(-2.0));
+        // Weighted avg: (1*50000 + 1*51000) / 2 = 50500
+        assert_eq!(pos.avg_price, dec!(50500));
     }
 }

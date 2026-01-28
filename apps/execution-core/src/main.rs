@@ -7,27 +7,28 @@ mod engine;
 mod nats_handler;
 mod observability;
 mod resilience;
+mod proto;
 
 use crate::auth::AuthService;
 use crate::config::Config;
 use crate::nats_handler::NatsSubscriber;
 use crate::observability::health::{start_health_server, HealthState};
 use crate::observability::metrics::get_metrics;
-use crate::resilience::{CircuitBreaker, CircuitBreakerConfig, RetryConfig, with_retry};
+use crate::resilience::{CircuitBreaker, CircuitBreakerConfig, RetryConfig, with_retry_async};
 use sqlx::postgres::PgPoolOptions;
-use std::sync::atomic::AtomicBool;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
-use tracing::{info, error, instrument};
+use tracing::{info, error};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     // Load configuration
     let config = Config::from_env()?;
-    
+
     // Initialize observability (tracing, metrics)
     observability::init_observability("execution-core")?;
-    
+
     info!(
         version = env!("CARGO_PKG_VERSION"),
         "Starting Execution Core..."
@@ -38,7 +39,7 @@ async fn main() -> anyhow::Result<()> {
     let redis_connected = Arc::new(AtomicBool::new(false));
 
     // Initialize database pool with retry
-    let pool = with_retry(
+    let pool = with_retry_async(
         "database_connect",
         &RetryConfig::default(),
         || async {
@@ -50,49 +51,51 @@ async fn main() -> anyhow::Result<()> {
                 .await
         },
     ).await?;
-    
+
     info!("Connected to PostgreSQL");
-    
+
     // Update DB pool metrics
-    get_metrics().db_pool_connections.with_label_values(&["active"]).set(0.0);
-    get_metrics().db_pool_connections.with_label_values(&["idle"]).set(config.pool_min_connections as f64);
+    if let Some(ref metrics) = *get_metrics() {
+        metrics.db_pool_connections.with_label_values(&["active"]).set(0.0);
+        metrics.db_pool_connections.with_label_values(&["idle"]).set(config.pool_min_connections as f64);
+    }
 
     // Initialize Redis with retry
     let redis_client = redis::Client::open(config.redis_url.as_str())?;
-    let redis_conn = with_retry(
+    let _redis_conn = with_retry_async(
         "redis_connect",
         &RetryConfig::default(),
         || async {
             redis::aio::ConnectionManager::new(redis_client.clone()).await
         },
     ).await?;
-    redis_connected.store(true, std::sync::atomic::Ordering::Relaxed);
+    redis_connected.store(true, Ordering::Relaxed);
     info!("Connected to Redis");
 
     // Initialize auth service
     let auth_service = Arc::new(AuthService::new(&config.jwt_secret));
     info!("Auth service initialized");
 
-    // Circuit breaker for NATS
-    let nats_circuit_breaker = Arc::new(CircuitBreaker::new(
-        "nats",
+    // Circuit breaker for NATS (unused but prepared for resilience)
+    let _nats_circuit_breaker = Arc::new(CircuitBreaker::new(
         CircuitBreakerConfig {
+            name: "nats".to_string(),
             failure_threshold: 5,
             success_threshold: 3,
             timeout: Duration::from_secs(30),
             half_open_max_calls: 3,
-        },
+        }
     ));
 
     // Connect to NATS with retry
-    let nats_client = with_retry(
+    let nats_client = with_retry_async(
         "nats_connect",
         &RetryConfig::default(),
         || async {
             async_nats::connect(&config.nats_url).await
         },
     ).await?;
-    nats_connected.store(true, std::sync::atomic::Ordering::Relaxed);
+    nats_connected.store(true, Ordering::Relaxed);
     info!(url = %config.nats_url, "Connected to NATS");
 
     // Initialize NATS subscriber
@@ -111,13 +114,14 @@ async fn main() -> anyhow::Result<()> {
         db_pool: pool.clone(),
         nats_connected: nats_connected.clone(),
         redis_connected: redis_connected.clone(),
+        ready: Arc::new(AtomicBool::new(true)),
     };
-    
-    let metrics_port = std::env::var("METRICS_PORT")
+
+    let metrics_port: u16 = std::env::var("METRICS_PORT")
         .unwrap_or_else(|_| "9100".to_string())
         .parse()
         .unwrap_or(9100);
-    
+
     tokio::spawn(async move {
         if let Err(e) = start_health_server(metrics_port, health_state).await {
             error!(error = %e, "Health server failed");
@@ -125,8 +129,8 @@ async fn main() -> anyhow::Result<()> {
     });
 
     // Graceful shutdown handler
-    let (shutdown_tx, mut shutdown_rx) = tokio::sync::broadcast::channel(1);
-    
+    let (shutdown_tx, mut shutdown_rx) = tokio::sync::broadcast::channel::<()>(1);
+
     tokio::spawn(async move {
         tokio::signal::ctrl_c().await.ok();
         info!("Received shutdown signal");

@@ -1,3 +1,6 @@
+//! Trading Engine Module
+//! Contains order processing and position management
+
 pub mod order_processor;
 pub mod position_keeper;
 

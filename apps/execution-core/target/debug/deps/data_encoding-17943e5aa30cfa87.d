@@ -1,0 +1,7 @@
+D:\enth\apps\execution-core\target\debug\deps\data_encoding-17943e5aa30cfa87.d: C:\Users\rafli\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\data-encoding-2.10.0\src\lib.rs
+
+D:\enth\apps\execution-core\target\debug\deps\libdata_encoding-17943e5aa30cfa87.rlib: C:\Users\rafli\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\data-encoding-2.10.0\src\lib.rs
+
+D:\enth\apps\execution-core\target\debug\deps\libdata_encoding-17943e5aa30cfa87.rmeta: C:\Users\rafli\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\data-encoding-2.10.0\src\lib.rs
+
+C:\Users\rafli\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\data-encoding-2.10.0\src\lib.rs:

@@ -1,11 +1,9 @@
 //! Authentication & Authorization Module
 //! Phase 2: JWT validation, RBAC, token blacklist
 
-use chrono::Utc;
 use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
 use redis::AsyncCommands;
 use serde::{Deserialize, Serialize};
-use sqlx::PgPool;
 use std::collections::HashSet;
 use thiserror::Error;
 use uuid::Uuid;
@@ -36,7 +34,9 @@ impl AuthContext {
     }
 
     pub fn can_access_account(&self, target: &Uuid) -> bool {
-        &self.account_id == target || self.has_permission("admin:full") || self.has_permission("accounts:read_all")
+        &self.account_id == target
+            || self.has_permission("admin:full")
+            || self.has_permission("accounts:read_all")
     }
 }
 
@@ -55,7 +55,7 @@ pub enum AuthError {
     #[error("Account disabled")]
     AccountDisabled,
     #[error("Database error: {0}")]
-    DatabaseError(#[from] sqlx::Error),
+    DatabaseError(String),
     #[error("Redis error: {0}")]
     RedisError(#[from] redis::RedisError),
     #[error("JWT error: {0}")]
@@ -73,12 +73,8 @@ impl AuthService {
         }
     }
 
-    pub async fn validate_token(
-        &self,
-        token: &str,
-        pool: &PgPool,
-        redis: &mut redis::aio::ConnectionManager,
-    ) -> Result<AuthContext, AuthError> {
+    /// Validate token claims only (without database/redis check)
+    pub fn validate_token_claims(&self, token: &str) -> Result<Claims, AuthError> {
         let mut validation = Validation::new(Algorithm::HS256);
         validation.validate_exp = true;
 
@@ -88,36 +84,27 @@ impl AuthService {
                 _ => AuthError::InvalidToken(e.to_string()),
             })?;
 
-        let claims = token_data.claims;
+        Ok(token_data.claims)
+    }
 
-        // Check blacklist
-        let blacklist_key = format!("token_blacklist:{}", claims.jti);
+    /// Check if token is blacklisted
+    pub async fn check_token_blacklist(
+        &self,
+        jti: &str,
+        redis: &mut redis::aio::ConnectionManager,
+    ) -> Result<bool, AuthError> {
+        let blacklist_key = format!("token_blacklist:{}", jti);
         let is_blacklisted: bool = redis.exists(&blacklist_key).await?;
-        if is_blacklisted {
-            return Err(AuthError::TokenRevoked);
-        }
+        Ok(is_blacklisted)
+    }
 
-        // Verify account
-        let account = sqlx::query!(
-            "SELECT id, is_active, locked_until FROM accounts WHERE id = $1",
-            Uuid::parse_str(&claims.sub).map_err(|_| AuthError::InvalidToken("Invalid UUID".into()))?
-        )
-        .fetch_optional(pool)
-        .await?
-        .ok_or(AuthError::AccountNotFound)?;
-
-        if !account.is_active {
-            return Err(AuthError::AccountDisabled);
-        }
-
-        if let Some(locked) = account.locked_until {
-            if locked > Utc::now() {
-                return Err(AuthError::AccountDisabled);
-            }
-        }
+    /// Convert claims to auth context
+    pub fn claims_to_context(&self, claims: Claims) -> Result<AuthContext, AuthError> {
+        let account_id = Uuid::parse_str(&claims.sub)
+            .map_err(|_| AuthError::InvalidToken("Invalid UUID in subject".into()))?;
 
         Ok(AuthContext {
-            account_id: account.id,
+            account_id,
             username: claims.username,
             role: claims.role,
             permissions: claims.permissions.into_iter().collect(),

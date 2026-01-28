@@ -1,10 +1,10 @@
+import { IsString, IsNotEmpty } from 'class-validator';
+
 export interface JwtPayload {
   sub: string;
   username: string;
   role: string;
   permissions: string[];
-  exp: number;
-  iat: number;
   jti: string;
 }
 
@@ -17,7 +17,12 @@ export interface AuthenticatedUser {
 }
 
 export class LoginDto {
+  @IsString()
+  @IsNotEmpty()
   username: string;
+
+  @IsString()
+  @IsNotEmpty()
   password: string;
 }
 

@@ -8,12 +8,12 @@ use axum::{
     routing::get,
     Json, Router,
 };
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use sqlx::PgPool;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use tokio::net::TcpListener;
-use tracing::{info, error, instrument};
+use tracing::{info, instrument};
 
 use super::metrics::encode_metrics;
 
@@ -55,7 +55,7 @@ static START_TIME: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock
 #[instrument(skip(state))]
 pub async fn start_health_server(port: u16, state: HealthState) -> anyhow::Result<()> {
     START_TIME.get_or_init(std::time::Instant::now);
-    
+
     let app = Router::new()
         .route("/health", get(health_check))
         .route("/health/live", get(liveness))
@@ -65,15 +65,13 @@ pub async fn start_health_server(port: u16, state: HealthState) -> anyhow::Resul
 
     let listener = TcpListener::bind(format!("0.0.0.0:{}", port)).await?;
     info!(port = port, "Health/metrics server started");
-    
+
     axum::serve(listener, app).await?;
     Ok(())
 }
 
 #[instrument(skip(state))]
 async fn health_check(State(state): State<HealthState>) -> impl IntoResponse {
-    let start = std::time::Instant::now();
-    
     // Check database
     let db_health = match check_database(&state.db_pool).await {
         Ok(latency) => ComponentHealth {
@@ -146,7 +144,10 @@ async fn health_check(State(state): State<HealthState>) -> impl IntoResponse {
 
 async fn check_database(pool: &PgPool) -> Result<u64, sqlx::Error> {
     let start = std::time::Instant::now();
-    sqlx::query("SELECT 1").fetch_one(pool).await?;
+    // Use sqlx::query_as with explicit type to avoid type inference issues
+    let _row: (i32,) = sqlx::query_as("SELECT 1")
+        .fetch_one(pool)
+        .await?;
     Ok(start.elapsed().as_millis() as u64)
 }
 
@@ -163,14 +164,18 @@ async fn readiness(State(state): State<HealthState>) -> impl IntoResponse {
         );
     }
 
-    let db_ok = sqlx::query("SELECT 1").fetch_one(&state.db_pool).await.is_ok();
+    // Check database with explicit type
+    let db_result: Result<(i32,), sqlx::Error> = sqlx::query_as("SELECT 1")
+        .fetch_one(&state.db_pool)
+        .await;
+    let db_ok = db_result.is_ok();
     let nats_ok = state.nats_connected.load(Ordering::Relaxed);
     let redis_ok = state.redis_connected.load(Ordering::Relaxed);
 
     if db_ok && nats_ok && redis_ok {
         (StatusCode::OK, Json(serde_json::json!({ "status": "ready" })))
     } else {
-        (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({ 
+        (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({
             "status": "not_ready",
             "database": db_ok,
             "nats": nats_ok,
